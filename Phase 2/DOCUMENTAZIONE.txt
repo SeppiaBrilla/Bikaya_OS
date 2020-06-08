@@ -1,0 +1,39 @@
+Documentazione relativa alla Fase 2 del progetto BIKAYA Operating System svolta da Alessio Pellegrino, William Arnone, Michele Cucci e Martina Ritrovato
+
+Spiegazione generale delle scelte implementative attuate e dello svolgimento di alcune funzioni.
+
+1. MAIN
+Il Main.c è un file relativamente semplice il quale volge ad inizializzare le strutture utilizzate e le Aree di memoria corrispondenti alle New Area delle Exceptions.
+Nell' attuale Phase 2 viene inizializzato solo un processo corrispondente alla funzione test implementata nel file p2test_bikaya_v0.2.c.
+Ogni Area di memoria viene inizializzata attraverso la funzione initArea la quale prende in input la posizione in memoria dell' Area da inizializzare e la funzione "handler" la quale gestisce il comportamento nel caso venisse richiamata una eccezione su tale Area.
+Si vanno successivamente ad inizializzare i Process Control Block e i Semaphore Descriptor con le funzione sviluppate per la Phase 1.
+Dopodichè vengono inizializzati dei semplici semafori attraverso la funzione initSem() e un PCB il quale andrà a corrispondere alla funzione test, ciò viene svolto dalla funzione InitProcess() la quale va ad assegnare al PCB il Program Counter corrente alla funzione test e lo Stack Pointer corrispondente. Infine sempre dentro ad InitProcess() vengono abilitati tutti gli interrupt e disabilitata la Virtual memory.
+Infine il processo viene caricato nella ready queue attraverso la funzione loadProcess().
+
+2. SCHEDULER
+Nel file scheduler.c vengono gestiti i funzionamenti dello scheduler Round Robin con priorità implementato da noi.
+Esso è composto da varie funzioni ma esse vengono utilizzate principalmente dalla funzione contextSwitch(), e dopo dalle funzioni loadProcess() e saveProcess().
+Il funzionamento di loadProcess() è relativamente semplice, essa prende il primo elemento dalla list ready queue, lo assegna al PCB current, svolge la funzione di Aging() per evitare eventuali starvation di processi e fa partire il TimeSlice di 3000ms attraverso la funzione setTIMER(); 
+un ulteriore comportamento interessante della funzione è nel caso il processo corrente sia NULL e non esistono attualmente processi nella ready queue poichè essi sono in stato Waiting, allora vengono riabilitati gli interrupt per gestire il processo nel casofinisca la sua operazione di I/O.
+La funzione saveProcess controlla la presenza di un eventuale processo corrente in esecuzione e nel caso sia presente, lo inserisce nella coda dei processi ready modificando lo stato del processo all'Old Area dell'eccezione che ha scatenato il contextSwitch, infine pone il processo corrente uguale a NULL.
+
+3. INTERRUPT
+Nel file interrupt.c andiamo ad inizializzare le funzioni di gestione per le TRAP, TLB e INTERRUPT, andando inoltre a gestire i casi di Interrupt in base al dispositivo che ne ha fatto richiesta.
+Le funzioni handlerTRAP() e handlerTLB() sono pressochè identiche se non per le modifiche ai campi di salvataggio, quindi verrano trattate come un'unica funzione in questa documentazione, esse infatti vanno a controllare se il processo che ha chiamato l'eccezione poteva farlo e nel caso ciò non fosse, vanno a terminare il processo corrente e ne caricano uno nuovo attraverso rispettivamente le funzioni Terminate_Process() e loadProcess().
+handlerInt() invece è una funzione più complessa, perchè essa deve riconoscere il tipo di dispositivo che l'ha richiamata e agire di conseguenza, ossia attuare un contextSwitch nel caso il processo corrente esaurisca il TimeSlice a sua dispozione oppure nel caso dei dispositivi di I/O richiamare la funzione DeviceHandler() oppure TerminalHandler() nel caso siano dei terminali. 
+Sia la DeviceHandler che la TerminalHandler agiscono nello stesso modo, andando innanzitutto a riconoscere il dispositivo degli 8 dispositivi disponibili che ha richiamato l'handler e poi sbloccarlo dalla coda del semaforo su cui si trova con la funzione DeviceVerhogen() e infine ritornare un valore di ACK al dispositivo.
+Infine la funzione DeviceVerhogen corrisponde ad una Verhogen solita, con la differenza che essa ritorna lo stato del registro attuale e diminuisce il valore di softBlockCount, ossia il numero di device attualmente bloccati su un semaforo.
+
+4. SYSCALL
+Il file syscall.c gestisce l'handlerSYS() ma poichè esso è di una mole notevole rispetto agli altri handler che usiamo si necessita l'utilizzo di un file separato.
+L'handlerSYS gestisce le SYSCALL richiamate dal sistema, il kernel che abbiamo usato ne implementa 8, ed ogni SYSCALL con un numero >8 significa che è una system call Custom e allora viene caricato sulla variabile oldState del pcb current lo stato prima che la syscall venisse generata e viene caricato il nuovo stato dal campo exceptions sempre del pcb corrente.
+Nel caso venga richiamata la syscall n°1, ritorniamo i valori user-time, kernel-time e origin-time del processo corrente.
+Se viene richiamata la syscall n°2, creiamo un nuovo processo figlio del chiamante con in parametri presi in input.
+La syscall n°3 termina il processo passato in input e tutti i suoi figli ed i loro figli, etc etc, altrimenti termina il processo corrente sempre terminando i figli, ed i figli dei figli, etc etc.
+La syscall n°4 è la funzione Verhogen, la quale aumenta il valore del semaforo passato in input, controlla se nella sua coda ci sia un processo e nel caso rimuove il primo processo trovato.
+La syscall n°5 è la funzione Passeren, la quale diminuisce il valore del semaforo passato in input, controlla se il semaforo sia >0 e nel caso non lo fosse, blocca il processo corrente, lo salva sulla sua coda di processi bloccatti e pone il processo corrente uguale a NULL.
+La syscall n°6 è la funzione WaitIO attiva una operazione di I/O copiando il primo parametro nel campo comando del registro del dispositivo indicato come dal secondo argomento e nel caso esso fosse un terminale il terzo argomento indica se sia una operazione di ricezione o di scrittura, infine eseguono una funzione Passeren sul dispositivo lanciato.
+La syscall n°7 è la funzione SpecPassup la quale registra quale handler dovrà essere attivato in caso di trap di SYSCALL/breakpoint. Inoltre esso assegna alle variabili excpetion e oldArea del processo corrente delle areee Old e New passate in input. Se per caso l'eccezione fosse stata già dichiarata termina il processo corrente con la funzione Terminate_Process e ritorna un valore di errore.
+Infine abbiamo la syscall n°8, la quale nient'altro chiede l'attuale valore ID del processo corrente e/o del processo padre del processo corrente, in base se i parametri dati in input siano NULL oppure no.
+
+Spero che la seguente documentazione sia stata utile, GL & HF!
